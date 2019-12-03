@@ -80,6 +80,9 @@ var (
 		providerconfigtypes.CloudProviderAlibaba: func(cvr *providerconfig.ConfigVarResolver) cloudprovidertypes.Provider {
 			return alibaba.New(cvr)
 		},
+		providerconfigtypes.CloudProviderMetal3: func(cvr *providerconfig.ConfigVarResolver) cloudprovidertypes.Provider {
+			return metal3.New(cvr)
+		},
 	}
 )
 
