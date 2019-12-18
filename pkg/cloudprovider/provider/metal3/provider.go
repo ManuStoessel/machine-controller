@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kubevirt
+package metal3
 
 import (
 	"context"
@@ -32,14 +32,15 @@ import (
 	"github.com/kubermatic/machine-controller/pkg/providerconfig"
 	providerconfigtypes "github.com/kubermatic/machine-controller/pkg/providerconfig/types"
 
-	corev1 "k8s.io/api/core/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -171,7 +172,7 @@ func (p *provider) Get(machine *v1alpha1.Machine, _ *cloudprovidertypes.Provider
 		return nil, cloudprovidererrors.ErrInstanceNotFound
 	}
 
-	return &host, nil
+	return &bmhInstance{host: host}, nil
 }
 
 // MigrateUID TODO: evaluate if this function is really needed in this context
@@ -223,9 +224,25 @@ func (p *provider) Create(machine *v1alpha1.Machine, _ *cloudprovidertypes.Provi
 
 	userDataSecretName := fmt.Sprintf("userdata-%s", machine.Name)
 
-	host := &bmh.BareMetalHost{
-		// TODO
+	host := &bmh.BareMetalHost{}
+
+	if host.Spec.Image == nil {
+		host.Spec.Image = &bmh.Image{
+			URL:      c.ImageURL,
+			Checksum: c.ImageCheckSum,
+		}
+		host.Spec.UserData.Name = userDataSecretName
+		host.Spec.UserData.Namespace = machine.Namespace
 	}
+
+	host.Spec.ConsumerRef = &corev1.ObjectReference{
+		Kind:       "Machine",
+		Name:       machine.Name,
+		Namespace:  machine.Namespace,
+		APIVersion: machine.APIVersion,
+	}
+
+	host.Spec.Online = true
 
 	sigClient, err := client.New(&c.Kubeconfig, client.Options{})
 	if err != nil {
@@ -233,22 +250,35 @@ func (p *provider) Create(machine *v1alpha1.Machine, _ *cloudprovidertypes.Provi
 	}
 	ctx := context.Background()
 
+	exists, err := bareMetalOperatorExists(ctx, sigClient, "kube-system")
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for baremetal operator deployment: %v", err)
+	}
+	if !exists {
+		err = deployBareMetalOperator(ctx, sigClient, "kube-system", "quay.io/metal3-io/baremetal-operator:master") // TODO: use stable metal3 baremetal-operator image
+		if err != nil {
+			return nil, fmt.Errorf("failed to create baremetal operator deployment: %v", err)
+		}
+	}
+
+
 	if err := sigClient.Create(ctx, host); err != nil {
-		return nil, fmt.Errorf("failed to create vmi: %v", err)
+		return nil, fmt.Errorf("failed to create baremetalhost: %v", err)
 	}
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            userDataSecretName,
 			Namespace:       host.Namespace,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(host, bmh.BareMetalHostGroupVersionKind)},
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(host, schema.GroupVersionKind{Group: "metal3.io", Version: "v1alpha1", Kind: "BareMetalHost"})},
 		},
 		Data: map[string][]byte{"userdata": []byte(userdata)},
 	}
 	if err := sigClient.Create(ctx, secret); err != nil {
 		return nil, fmt.Errorf("failed to create secret for userdata: %v", err)
 	}
-	return &host, nil
+
+	return &bmhInstance{host: host}, nil
 
 }
 
@@ -282,7 +312,7 @@ func (p *provider) SetMetricsForMachines(machines v1alpha1.MachineList) error {
 	return nil
 }
 
-func bareMetalOperatorExists(ctx context.Context, c *client.Client, ns string) (bool, error) {
+func bareMetalOperatorExists(ctx context.Context, c client.Client, ns string) (bool, error) {
 	deployment := &appsv1.Deployment{}
 	if err := c.Get(ctx, types.NamespacedName{Namespace: ns, Name: "metal3-baremetal-operator"}, deployment); err != nil {
 		if !kerrors.IsNotFound(err) {
@@ -293,12 +323,56 @@ func bareMetalOperatorExists(ctx context.Context, c *client.Client, ns string) (
 	return true, nil
 }
 
-func deployBareMetalOperator(ctx context.Context, c *client.Client, ns string, image string) error {
-	operator := &appsv1.Deployment{
-		//TODO
+func deployBareMetalOperator(ctx context.Context, c client.Client, ns string, image string) error {
+	// TODO: learn how ironic works and deploy all the shit from here: https://github.com/metal3-io/baremetal-operator/tree/master/deploy
+	operator := &appsv1.Deployment{}
+	operator.Name = "metal3-baremetal-operator"
+	operator.Namespace = ns
+	operator.Spec.Replicas = func(i int32) *int32 { return &i }(1) // just don't ask...
+	operator.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app":"metal3-baremetal-operator"}}
+	operator.Spec.Template = corev1.PodTemplateSpec{
+		// TODO
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:         "baremetal-operator",
+					Image:        image,
+					Args:         []string{"bla", "foo"},
+				},
+			},
+		},
 	}
-	if err := c.Create(ctx, types.NamespacedName{Namespace: ns, Name: "metal3-baremetal-operator"}, operator); err != nil {
+	if err := c.Create(ctx, operator); err != nil {
 		return err
 	}
 	return nil
+}
+
+type bmhInstance struct {
+	host *bmh.BareMetalHost
+}
+
+func (b *bmhInstance) Name() string {
+	return b.host.Name
+}
+
+func (b *bmhInstance) ID() string {
+	return b.host.Status.Provisioning.ID
+}
+
+func (b *bmhInstance) Addresses() []string {
+	addresses := make([]string, len(b.host.Status.HardwareDetails.NIC))
+	for _, nic := range b.host.Status.HardwareDetails.NIC {
+		addresses = append(addresses, nic.IP)
+	}
+
+	return addresses
+}
+
+func (b *bmhInstance) Status() instance.Status {
+	if b.host.Spec.Online && b.host.Status.PoweredOn && b.host.Status.OperationalStatus == "OK" {
+		return instance.StatusRunning
+	}
+
+	return instance.StatusUnknown
 }
