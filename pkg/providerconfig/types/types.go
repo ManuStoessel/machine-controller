@@ -48,6 +48,7 @@ const (
 	CloudProviderHetzner      CloudProvider = "hetzner"
 	CloudProviderKubeVirt     CloudProvider = "kubevirt"
 	CloudProviderLinode       CloudProvider = "linode"
+	CloudProviderMetal3       CloudProvider = "metal3"
 	CloudProviderOpenstack    CloudProvider = "openstack"
 	CloudProviderPacket       CloudProvider = "packet"
 	CloudProviderVsphere      CloudProvider = "vsphere"
@@ -75,6 +76,7 @@ var (
 		CloudProviderHetzner,
 		CloudProviderKubeVirt,
 		CloudProviderLinode,
+		CloudProviderMetal3,
 		CloudProviderOpenstack,
 		CloudProviderPacket,
 		CloudProviderVsphere,
