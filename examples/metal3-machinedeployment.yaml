@@ -26,17 +26,36 @@ spec:
             - "<< YOUR_PUBLIC_KEY >>"
           cloudProvider: "metal3"
           cloudProviderSpec:
-            BMCAddress: "redfish+https://198.2.2.2"
-	          BMCUser: "admin"
-	          BMCPassword: "admin1234"
-	          ImageURL: "https://35.35.35.35/ubuntu/ubuntu-18.04"
-	          ImageChecksum: "https://35.35.35.35/ubuntu/ubuntu-18.04.md5"
+            bmcaddress: "redfish+https://198.2.2.2"
+            bmcuser: "admin"
+            bmcpassword: "admin1234"
+            imageurl: "https://35.35.35.35/ubuntu/ubuntu-18.04"
+            imagechecksum: "https://35.35.35.35/ubuntu/ubuntu-18.04.md5"
             kubeconfig:
-              value: '<< KUBECONFIG >>'
+              value: |
+                apiVersion: v1
+                clusters:
+                - cluster:
+                    certificate-authority: /home/manuel/.minikube/ca.crt
+                    server: https://192.168.99.102:8443
+                  name: minikube
+                contexts:
+                - context:
+                    cluster: minikube
+                    user: minikube
+                  name: minikube
+                current-context: minikube
+                kind: Config
+                preferences: {}
+                users:
+                - name: minikube
+                  user:
+                    client-certificate: /home/manuel/.minikube/client.crt
+                    client-key: /home/manuel/.minikube/client.key
           # os will be ignored for metla3 since specific image url will be used
           operatingSystem: "ubuntu"
           operatingSystemSpec:
             distUpgradeOnBoot: false
             disableAutoUpdate: true
       versions:
-        kubelet: "1.16.1"
+        kubelet: "1.17.0"

@@ -610,6 +610,14 @@
   version = "v1.0.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:52a59fad001cf729dd7c61f88e99ac88ecde973af07ba5ef75f2c22a458a35d5"
+  name = "github.com/metal3-io/baremetal-operator"
+  packages = ["pkg/apis/metal3/v1alpha1"]
+  pruneopts = "NUT"
+  revision = "6ae8d7eb8c0ef6f940f410b9338a3ce465937473"
+
+[[projects]]
   digest = "1:f9f72e583aaacf1d1ac5d6121abd4afd3c690baa9e14e1d009df26bf831ba347"
   name = "github.com/mitchellh/go-homedir"
   packages = ["."]
@@ -1543,6 +1551,7 @@
     "github.com/hetznercloud/hcloud-go/hcloud",
     "github.com/linode/linodego",
     "github.com/mattbaird/jsonpatch",
+    "github.com/metal3-io/baremetal-operator/pkg/apis/metal3/v1alpha1",
     "github.com/oklog/run",
     "github.com/packethost/packngo",
     "github.com/patrickmn/go-cache",
